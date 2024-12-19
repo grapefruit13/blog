@@ -1,81 +1,48 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import styles from "./switch.module.css";
-import { memo, useEffect, useState } from "react";
-
-declare global {
-  var updateDOM: () => void;
-}
-
-type ColorSchemePreference = "system" | "dark" | "light";
 
 const STORAGE_KEY = "nextjs-blog-starter-theme";
-const modes: ColorSchemePreference[] = ["system", "dark", "light"];
+const modes = ["system", "dark", "light"] as const;
+type ColorSchemePreference = (typeof modes)[number];
 
-/** to reuse updateDOM function defined inside injected script */
-
-/** function to be injected in script tag for avoiding FOUC (Flash of Unstyled Content) */
-export const NoFOUCScript = (storageKey: string) => {
-  /* can not use outside constants or function as this script will be injected in a different context */
-  const [SYSTEM, DARK, LIGHT] = ["system", "dark", "light"];
-
-  /** Modify transition globally to avoid patched transitions */
-  const modifyTransition = () => {
-    const css = document.createElement("style");
-    css.textContent = "*,*:after,*:before{transition:none !important;}";
-    document.head.appendChild(css);
-
-    return () => {
-      /* Force restyle */
-      getComputedStyle(document.body);
-      /* Wait for next tick before removing */
-      setTimeout(() => document.head.removeChild(css), 1);
-    };
-  };
-
-  const media = matchMedia(`(prefers-color-scheme: ${DARK})`);
-
-  /** function to add remove dark class */
-  window.updateDOM = () => {
-    const restoreTransitions = modifyTransition();
-    const mode = localStorage.getItem(storageKey) ?? SYSTEM;
-    const systemMode = media.matches ? DARK : LIGHT;
-    const resolvedMode = mode === SYSTEM ? systemMode : mode;
-    const classList = document.documentElement.classList;
-    if (resolvedMode === DARK) classList.add(DARK);
-    else classList.remove(DARK);
-    document.documentElement.setAttribute("data-mode", mode);
-    restoreTransitions();
-  };
-  window.updateDOM();
-  media.addEventListener("change", window.updateDOM);
-};
-
-let updateDOM: () => void;
-
-/**
- * Switch button to quickly toggle user preference.
- */
-const Switch = () => {
-  const [mode, setMode] = useState<ColorSchemePreference>(
-    () =>
+const ThemeSwitcher = () => {
+  const [mode, setMode] = useState<ColorSchemePreference>(() => {
+    return (
       ((typeof localStorage !== "undefined" &&
-        localStorage.getItem(STORAGE_KEY)) ??
-        "system") as ColorSchemePreference
-  );
+        localStorage.getItem(STORAGE_KEY)) as ColorSchemePreference) ?? "system"
+    );
+  });
 
+  // 클라이언트에서 DOM 업데이트를 위한 useEffect
+  // updating DOM on Client side with useEffect
   useEffect(() => {
-    // store global functions to local variables to avoid any interference
-    updateDOM = window.updateDOM;
-    /** Sync the tabs */
-    addEventListener("storage", (e: StorageEvent): void => {
-      e.key === STORAGE_KEY && setMode(e.newValue as ColorSchemePreference);
-    });
+    const savedMode = localStorage.getItem(STORAGE_KEY) ?? "system";
+    const systemMode = window.matchMedia("(prefers-color-scheme: dark)").matches
+      ? "dark"
+      : "light";
+    const resolvedMode = savedMode === "system" ? systemMode : savedMode;
+
+    // 클라이언트에서만 className과 data-mode 업데이트
+    // updating className and data-mode only in Client side
+    document.documentElement.classList.add(resolvedMode);
+    document.documentElement.setAttribute("data-mode", savedMode);
+    localStorage.setItem(STORAGE_KEY, savedMode);
   }, []);
 
+  // 모드 변경 처리
+  /** when switch mode **/
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, mode);
-    updateDOM();
+    const systemMode = window.matchMedia("(prefers-color-scheme: dark)").matches
+      ? "dark"
+      : "light";
+    const resolvedMode = mode === "system" ? systemMode : mode;
+
+    document.documentElement.classList.remove("dark", "light");
+    document.documentElement.classList.add(resolvedMode);
+    document.documentElement.setAttribute("data-mode", mode);
   }, [mode]);
 
   /** toggle mode */
@@ -92,22 +59,4 @@ const Switch = () => {
   );
 };
 
-const Script = memo(() => (
-  <script
-    dangerouslySetInnerHTML={{
-      __html: `(${NoFOUCScript.toString()})('${STORAGE_KEY}')`,
-    }}
-  />
-));
-
-/**
- * This component wich applies classes and transitions.
- */
-export const ThemeSwitcher = () => {
-  return (
-    <>
-      <Script />
-      <Switch />
-    </>
-  );
-};
+export default ThemeSwitcher;
